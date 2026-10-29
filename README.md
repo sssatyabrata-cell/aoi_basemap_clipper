@@ -1,0 +1,2 @@
+# aoi_basemap_clipper
+aoi_basemap_clipper
