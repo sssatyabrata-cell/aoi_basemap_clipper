@@ -1,0 +1,34 @@
+[general]
+name=AOI Basemap Clipper
+qgisMinimumVersion=3.22
+description=Clip any raster / online basemap to an AOI at full native resolution, as fast as possible: parallel XYZ tile download, multi-threaded clip, optional reprojection to EPSG:4326, tiling and a portable tile index.
+version=2.0.1
+author=Satyabrata Sahoo
+email=sssatyabrata@gmail.com
+
+about=Select an AOI polygon layer and an image (local raster, XYZ or WMS basemap). Local rasters are cut straight from the source on their own pixel grid (bit-identical pixels). XYZ layers are downloaded tile by tile in parallel - only the tiles that touch the AOI - and written on the tile grid with no resampling. The result is clipped to the AOI shape in a single multi-threaded warp (optionally reprojected to EPSG:4326), split into tiles in parallel and indexed in a GeoPackage tile index with relative paths and one-click Load/Remove Image actions. Make sure the imagery provider's terms allow offline copies.
+
+changelog=2.0.1
+ - Fixes: dialog no longer gets stuck disabled if the output folder is not writable; options are locked while a job runs; tiling stops immediately after an error; XYZ download aborts early when the server refuses tiles; '+' in tile URLs preserved; curved AOI geometries linearised; size / disk check also for resized local rasters; temp style file removed
+ 2.0.0
+ - Much faster: direct parallel XYZ tile download (only tiles touching the AOI), multi-threaded warp and compression, parallel tiling, fast Deflate / ZSTD options, uncompressed sparse temp files
+ - Safe by default: reprojection is OFF by default; palette / class rasters are never interpolated and get real transparency
+ - Tile index stores relative paths (portable); Load/Remove Image actions rewritten (no quoting problems, no duplicates, exact path match, metadata read via GDAL)
+ - No global GDAL exception switch any more (other plugins are unaffected)
+ - Never overwrites silently; partial files are removed on cancel/error; outputs are swapped in atomically
+ - Dialog parented to QGIS, works on a private clone of the image layer, cancel-safe close
+ - Correct ground pixel size for feet-based CRSs, densified cutline edges, rotated rasters handled, wider GDAL source support (/vsicurl, GPKG, NetCDF...)
+ - Added README, LICENSE and unit tests
+ 1.1.0
+ - Fixed shifted / squeezed / expanded output, fixed loss of resolution, single-step clip + reproject
+
+tracker=https://github.com/sssatyabrata-cell/aoi_basemap_clipper/issues
+repository=https://github.com/sssatyabrata-cell/aoi_basemap_clipper
+homepage=https://github.com/sssatyabrata-cell/aoi_basemap_clipper
+icon=icon.png
+tags=aoi,clip,basemap,tile,tileindex,raster,reproject,xyz
+category=Raster
+experimental=False
+deprecated=False
+server=False
+hasProcessingProvider=no
