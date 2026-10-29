@@ -21,12 +21,13 @@ import time
 import numpy as np
 
 from qgis.PyQt.QtCore import QSize, QUrl
-from qgis.PyQt.QtGui import QColor, QImage, QPainter
+from qgis.PyQt.QtGui import QColor, QGuiApplication, QIcon, QImage, QPainter
 from qgis.PyQt.QtNetwork import QNetworkRequest
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QSpinBox, QCheckBox, QFileDialog, QTextEdit, QProgressBar,
-    QMessageBox, QGroupBox, QApplication, QComboBox, QDoubleSpinBox
+    QMessageBox, QGroupBox, QApplication, QComboBox, QDoubleSpinBox,
+    QScrollArea, QFrame, QWidget
 )
 from qgis.core import (
     Qgis, QgsProject, QgsMapSettings, QgsMapRendererParallelJob, QgsRectangle,
@@ -131,14 +132,45 @@ class AOIBasemapClipperDialog(QDialog):
         self._close_after_run = False
         self._temp_paths = []
         self.setWindowTitle("AOI Basemap Clipper")
-        self.setMinimumWidth(580)
+        icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        self.setMinimumSize(560, 360)
         self._build_ui()
+        self._fit_to_screen()
         self._load_settings()
         self._update_source_info()
 
     # ------------------------------------------------------------------ UI
+    def _fit_to_screen(self):
+        """Open at a size that fits the screen (small laptops included); the
+        option area scrolls when the window is smaller than its content."""
+        screen = QGuiApplication.primaryScreen()
+        try:
+            screen = self.screen() or screen
+        except AttributeError:
+            pass
+        if screen is None:
+            self.resize(1020, 700)
+            return
+        avail = screen.availableGeometry()
+        self.resize(min(1020, int(avail.width() * 0.92)),
+                    min(760, int(avail.height() * 0.88)))
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
+        # options live in a scroll area, in two columns; buttons, progress bar
+        # and log stay visible underneath
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(_scoped(QFrame, "Shape", "NoFrame"))
+        body = QWidget()
+        cols = QHBoxLayout(body)
+        left, right = QVBoxLayout(), QVBoxLayout()
+        cols.addLayout(left, 1)
+        cols.addLayout(right, 1)
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
 
         # ---- Input ------------------------------------------------------
         box_in = QGroupBox("Input")
@@ -160,17 +192,17 @@ class AOIBasemapClipperDialog(QDialog):
         self.info_lbl.setWordWrap(True)
         self.info_lbl.setStyleSheet("color: gray;")
         form.addRow("", self.info_lbl)
-        layout.addWidget(box_in)
+        left.addWidget(box_in)
 
         # ---- Resolution ---------------------------------------------------
         box_res = QGroupBox("Resolution")
         rform = QFormLayout(box_res)
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Auto - keep full native resolution (recommended)", MODE_AUTO)
+        self.mode_combo.addItem("Auto - full native resolution (recommended)", MODE_AUTO)
         self.mode_combo.addItem("XYZ zoom level (Web-Mercator layers)", MODE_ZOOM)
         self.mode_combo.addItem("Fixed output width (px)", MODE_WIDTH)
-        self.mode_combo.addItem("Match current map canvas zoom (what you see now)", MODE_CANVAS)
-        self.mode_combo.addItem("Custom ground pixel size (m/px) - e.g. 0.15 for 6-inch imagery", MODE_GROUND)
+        self.mode_combo.addItem("Match current map canvas zoom", MODE_CANVAS)
+        self.mode_combo.addItem("Custom ground pixel size (m/px)", MODE_GROUND)
         self.mode_combo.currentIndexChanged.connect(self._update_source_info)
         rform.addRow("Mode:", self.mode_combo)
 
@@ -194,24 +226,26 @@ class AOIBasemapClipperDialog(QDialog):
         self.width_spin.setSuffix(" px")
         rform.addRow("Output width:", self.width_spin)
 
-        self.reproject_chk = QCheckBox(
-            "Reproject to EPSG:4326 (resamples the pixels - leave OFF to keep them untouched)")
+        self.reproject_chk = QCheckBox("Reproject to EPSG:4326 (resamples pixels)")
+        self.reproject_chk.setToolTip("Leave OFF to keep the source pixels untouched.")
         self.reproject_chk.setChecked(False)
         rform.addRow("", self.reproject_chk)
 
         self.resample_combo = QComboBox()
-        for label, key in (("Auto (recommended: nearest for palette / class rasters)", "auto"),
+        for label, key in (("Auto (recommended)", "auto"),
                            ("Cubic (sharpest)", "cubic"), ("Bilinear", "bilinear"),
                            ("Lanczos", "lanczos"), ("Nearest", "near")):
             self.resample_combo.addItem(label, key)
-        rform.addRow("Resampling (only when reprojecting / resizing):", self.resample_combo)
-        layout.addWidget(box_res)
+        self.resample_combo.setToolTip("Only used when reprojecting or resizing. Auto uses nearest for palette / class rasters.")
+        rform.addRow("Resampling:", self.resample_combo)
+        left.addWidget(box_res)
+        left.addStretch(1)
 
         # ---- Performance ----------------------------------------------------
         box_perf = QGroupBox("Speed")
         pform = QFormLayout(box_perf)
-        self.direct_chk = QCheckBox(
-            "Download XYZ tiles directly in parallel (fastest; falls back to QGIS rendering)")
+        self.direct_chk = QCheckBox("Download XYZ tiles directly in parallel")
+        self.direct_chk.setToolTip("Fastest option. Falls back to QGIS rendering when not possible.")
         self.direct_chk.setChecked(True)
         pform.addRow("", self.direct_chk)
         cpu = os.cpu_count() or 4
@@ -226,13 +260,13 @@ class AOIBasemapClipperDialog(QDialog):
         self.parallel_spin.setValue(6)
         self.parallel_spin.setToolTip("Blocks rendered at the same time for WMS / other layers "
                                       "that cannot be downloaded tile by tile.")
-        pform.addRow("Parallel render requests (WMS / other):", self.parallel_spin)
+        pform.addRow("Render requests (WMS):", self.parallel_spin)
         self.workers_spin = QSpinBox()
         self.workers_spin.setRange(1, 64)
         self.workers_spin.setValue(max(2, min(8, cpu)))
         self.workers_spin.setToolTip("Threads used to cut and compress the output tiles.")
         pform.addRow("Tiling threads:", self.workers_spin)
-        layout.addWidget(box_perf)
+        right.addWidget(box_perf)
 
         # ---- Output ---------------------------------------------------------
         box_out = QGroupBox("Output")
@@ -267,16 +301,16 @@ class AOIBasemapClipperDialog(QDialog):
         self.compress_combo.addItem("Deflate - fast (lossless, default)", "DEFLATE_FAST")
         self.compress_combo.addItem("Deflate - normal (lossless, smaller)", "DEFLATE")
         if core.zstd_available():
-            self.compress_combo.addItem("ZSTD (lossless, fastest + small; needs modern GDAL to read)", "ZSTD")
+            self.compress_combo.addItem("ZSTD (lossless, fast; needs modern GDAL)", "ZSTD")
         self.compress_combo.addItem("LZW (lossless)", "LZW")
         self.compress_combo.addItem("None (fastest write, largest files)", "NONE")
         oform.addRow("Compression:", self.compress_combo)
 
         self.vendor_edit = QLineEdit()
-        self.vendor_edit.setPlaceholderText("optional - used by the tile index 'Load Image' action")
+        self.vendor_edit.setPlaceholderText("optional")
         oform.addRow("Vendor:", self.vendor_edit)
         self.date_edit = QLineEdit()
-        self.date_edit.setPlaceholderText("optional - YYYY-MM-DD")
+        self.date_edit.setPlaceholderText("optional, YYYY-MM-DD")
         oform.addRow("Acquisition date:", self.date_edit)
 
         self.skip_empty_chk = QCheckBox("Skip empty (fully transparent) tiles")
@@ -288,12 +322,13 @@ class AOIBasemapClipperDialog(QDialog):
         self.add_to_project_chk = QCheckBox("Add tile index to project when finished")
         self.add_to_project_chk.setChecked(True)
         oform.addRow("", self.add_to_project_chk)
-        self.actions_chk = QCheckBox(
-            "Embed one-click 'Load Image' / 'Remove Image' actions in the tile index "
-            "(small Python snippets that run when you click them)")
+        self.actions_chk = QCheckBox("Embed 'Load / Remove Image' actions in the tile index")
+        self.actions_chk.setToolTip("Small Python snippets stored in the tile index style; "
+                                    "they only run when you click them.")
         self.actions_chk.setChecked(True)
         oform.addRow("", self.actions_chk)
-        layout.addWidget(box_out)
+        right.addWidget(box_out)
+        right.addStretch(1)
 
         # ---- Run / cancel / progress ---------------------------------------
         btn_row = QHBoxLayout()
@@ -317,7 +352,8 @@ class AOIBasemapClipperDialog(QDialog):
 
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
-        self.log_box.setFixedHeight(150)
+        self.log_box.setMinimumHeight(60)
+        self.log_box.setMaximumHeight(110)
         layout.addWidget(self.log_box)
 
     # ------------------------------------------------------------ settings

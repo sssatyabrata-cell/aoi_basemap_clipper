@@ -2,13 +2,15 @@
 name=AOI Basemap Clipper
 qgisMinimumVersion=3.22
 description=Clip any raster / online basemap to an AOI at full native resolution, as fast as possible: parallel XYZ tile download, multi-threaded clip, optional reprojection to EPSG:4326, tiling and a portable tile index.
-version=2.0.1
+version=2.0.2
 author=Satyabrata Sahoo
 email=sssatyabrata@gmail.com
 
 about=Select an AOI polygon layer and an image (local raster, XYZ or WMS basemap). Local rasters are cut straight from the source on their own pixel grid (bit-identical pixels). XYZ layers are downloaded tile by tile in parallel - only the tiles that touch the AOI - and written on the tile grid with no resampling. The result is clipped to the AOI shape in a single multi-threaded warp (optionally reprojected to EPSG:4326), split into tiles in parallel and indexed in a GeoPackage tile index with relative paths and one-click Load/Remove Image actions. Make sure the imagery provider's terms allow offline copies.
 
-changelog=2.0.1
+changelog=2.0.2
+ - Compact dialog: two columns, scrollable options, opens sized to the screen (fits small laptops), shorter labels with tooltips, new icon in the title bar
+ 2.0.1
  - Fixes: dialog no longer gets stuck disabled if the output folder is not writable; options are locked while a job runs; tiling stops immediately after an error; XYZ download aborts early when the server refuses tiles; '+' in tile URLs preserved; curved AOI geometries linearised; size / disk check also for resized local rasters; temp style file removed
  2.0.0
  - Much faster: direct parallel XYZ tile download (only tiles touching the AOI), multi-threaded warp and compression, parallel tiling, fast Deflate / ZSTD options, uncompressed sparse temp files
